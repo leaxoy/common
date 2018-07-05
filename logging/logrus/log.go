@@ -7,26 +7,53 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/sirupsen/logrus"
+	"github.com/leaxoy/common/logging"
 	"github.com/leaxoy/logprovider"
+	"github.com/sirupsen/logrus"
 )
 
 type (
-	KV map[string]interface{}
 	LogConf struct {
 		LogDir  string
 		LogFile string
 	}
+
+	handler struct{}
 )
 
-func InitLogger(config LogConf) {
+func (h *handler) Debugln(kv logging.KV, msg string) {
+	With(2, kv).Debugln(msg)
+}
+
+func (h *handler) Infoln(kv logging.KV, msg string) {
+	With(2, kv).Infoln(msg)
+}
+
+func (h *handler) Warnln(kv logging.KV, msg string) {
+	With(2, kv).Warnln(msg)
+}
+
+func (h *handler) Errorln(err error, kv logging.KV, msg string) {
+	With(2, kv).WithError(err).Warnln(msg)
+}
+
+func (h *handler) Panicln(kv logging.KV, msg string) {
+	With(2, kv).Panicln(msg)
+}
+
+func (h *handler) Fatalln(kv logging.KV, msg string) {
+	With(2, kv).Fatalln(msg)
+}
+
+func NewLogger(config LogConf) logging.Logger {
 	lp := logprovider.NewAsyncFrame(1, logprovider.NewFileProvider(filepath.Join(config.LogDir, config.LogFile), logprovider.DayDur))
 	writer := io.MultiWriter(os.Stderr, lp)
 	logrus.SetOutput(writer)
 	logrus.SetFormatter(&logrus.JSONFormatter{})
+	return &handler{}
 }
 
-func With(skip int, kv KV) *logrus.Entry {
+func With(skip int, kv logging.KV) *logrus.Entry {
 	if kv == nil {
 		kv = make(map[string]interface{})
 	}
@@ -38,39 +65,4 @@ func With(skip int, kv KV) *logrus.Entry {
 	kv["caller"] = caller
 	kv["func"] = runtime.FuncForPC(pc).Name()
 	return logrus.WithFields(logrus.Fields(kv))
-}
-
-// Infoln wrap `logrus.Infoln` With caller info.
-func Infoln(kv KV, args ...interface{}) {
-	With(2, kv).Infoln(args...)
-}
-
-// Debugln wrap `logrus.Debugln` With caller info.
-func Debugln(kv KV, args ...interface{}) {
-	With(2, kv).Debugln(args...)
-}
-
-// Println wrap `logrus.Println` With caller info.
-func Println(kv KV, args ...interface{}) {
-	With(2, kv).Println(args...)
-}
-
-// Warnln wrap `logrus.Warnln` With caller info.
-func Warnln(kv KV, args ...interface{}) {
-	With(2, kv).Warnln(args...)
-}
-
-// Errorln wrap `logrus.Errorln` With caller info.
-func Errorln(err error, kv KV, args ...interface{}) {
-	With(2, kv).WithError(err).Errorln(args...)
-}
-
-// Fatalln wrap `logrus.Fatalln` With caller info.
-func Fatalln(kv KV, args ...interface{}) {
-	With(2, kv).Fatalln(args...)
-}
-
-// Panicln wrap `logrus.Panicln` With caller info.
-func Panicln(kv KV, args ...interface{}) {
-	With(2, kv).Panicln(args...)
 }
