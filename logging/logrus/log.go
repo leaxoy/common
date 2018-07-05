@@ -12,14 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type (
-	LogConf struct {
-		LogDir  string
-		LogFile string
-	}
-
-	handler struct{}
-)
+type handler struct{}
 
 func (h *handler) Debugln(kv logging.KV, msg string) {
 	With(2, kv).Debugln(msg)
@@ -45,7 +38,7 @@ func (h *handler) Fatalln(kv logging.KV, msg string) {
 	With(2, kv).Fatalln(msg)
 }
 
-func NewLogger(config LogConf) logging.Logger {
+func NewLogger(config logging.LoggerConfig) logging.Logger {
 	lp := logprovider.NewAsyncFrame(1, logprovider.NewFileProvider(filepath.Join(config.LogDir, config.LogFile), logprovider.DayDur))
 	writer := io.MultiWriter(os.Stderr, lp)
 	logrus.SetOutput(writer)
