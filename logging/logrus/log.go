@@ -12,38 +12,57 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type handler struct{}
+type (
+	handler struct {
+		skip int
+	}
+	logrusConfig struct {
+		logging.LoggerConfig
+		skip int
+	}
+	Option func(*logrusConfig)
+)
+
+func AddSkip(skip int) Option {
+	return func(i *logrusConfig) {
+		i.skip = skip
+	}
+}
 
 func (h *handler) Debugln(kv logging.KV, msg string) {
-	With(2, kv).Debugln(msg)
+	With(h.skip, kv).Debugln(msg)
 }
 
 func (h *handler) Infoln(kv logging.KV, msg string) {
-	With(2, kv).Infoln(msg)
+	With(h.skip, kv).Infoln(msg)
 }
 
 func (h *handler) Warnln(kv logging.KV, msg string) {
-	With(2, kv).Warnln(msg)
+	With(h.skip, kv).Warnln(msg)
 }
 
 func (h *handler) Errorln(err error, kv logging.KV, msg string) {
-	With(2, kv).WithError(err).Warnln(msg)
+	With(h.skip, kv).WithError(err).Warnln(msg)
 }
 
 func (h *handler) Panicln(kv logging.KV, msg string) {
-	With(2, kv).Panicln(msg)
+	With(h.skip, kv).Panicln(msg)
 }
 
 func (h *handler) Fatalln(kv logging.KV, msg string) {
-	With(2, kv).Fatalln(msg)
+	With(h.skip, kv).Fatalln(msg)
 }
 
-func NewLogger(config logging.LoggerConfig) logging.Logger {
-	lp := logprovider.NewAsyncFrame(1, logprovider.NewFileProvider(filepath.Join(config.LogDir, config.LogFile), logprovider.DayDur))
+func NewLogger(config logging.LoggerConfig, opts ...Option) logging.Logger {
+	cfg := &logrusConfig{config, 2}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	lp := logprovider.NewAsyncFrame(1, logprovider.NewFileProvider(filepath.Join(cfg.LogDir, cfg.LogFile), logprovider.DayDur))
 	writer := io.MultiWriter(os.Stderr, lp)
 	logrus.SetOutput(writer)
 	logrus.SetFormatter(&logrus.JSONFormatter{})
-	return &handler{}
+	return &handler{skip: cfg.skip}
 }
 
 func With(skip int, kv logging.KV) *logrus.Entry {
