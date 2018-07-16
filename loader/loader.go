@@ -1,4 +1,4 @@
-package confloader
+package loader
 
 type Loader interface {
 	Load(string, interface{}) error
