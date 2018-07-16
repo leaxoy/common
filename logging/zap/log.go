@@ -22,6 +22,8 @@ func (h *handler) sync(core zapcore.Core) {
 	}
 }
 
+func (h *handler) Skip(skip int) {}
+
 func (*handler) Debugln(kv logging.KV, msg string) {
 	zap.L().Debug(msg, wrapFields(nil, kv)...)
 }

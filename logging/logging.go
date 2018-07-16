@@ -11,6 +11,7 @@ type (
 		LogFile string `json:"log_file" yaml:"log_file" toml:"log_file"`
 	}
 	Logger interface {
+		Skip(skip int)
 		Debugln(kv KV, msg string)
 		Infoln(kv KV, msg string)
 		Warnln(kv KV, msg string)
@@ -21,6 +22,8 @@ type (
 )
 
 type nopLogger struct{}
+
+func (*nopLogger) Skip(skip int) {}
 
 func (*nopLogger) Debugln(kv KV, msg string) {}
 
@@ -43,6 +46,10 @@ func SetLogger(logger Logger) {
 	once.Do(func() {
 		defaultLogger = logger
 	})
+}
+
+func Skip(skip int) {
+	defaultLogger.Skip(skip)
 }
 
 func Debugln(kv KV, args ...string) {

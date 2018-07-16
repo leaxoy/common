@@ -23,10 +23,8 @@ type (
 	Option func(*logrusConfig)
 )
 
-func AddSkip(skip int) Option {
-	return func(i *logrusConfig) {
-		i.skip = skip
-	}
+func (h *handler) Skip(skip int) {
+	h.skip = skip
 }
 
 func (h *handler) Debugln(kv logging.KV, msg string) {
