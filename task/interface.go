@@ -1,6 +1,8 @@
 package task
 
-import "context"
+import (
+	"golang.org/x/net/context"
+)
 
 type Tasker interface {
 	Name() string
