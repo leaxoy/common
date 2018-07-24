@@ -3,12 +3,13 @@ package yml
 import (
 	"io/ioutil"
 
+	"github.com/leaxoy/common/loader"
 	"gopkg.in/yaml.v2"
 )
 
 type Loader struct{}
 
-func (l *Loader) Load(f string, v interface{}) error {
+func (*Loader) Load(f string, v interface{}) error {
 	buf, err := ioutil.ReadFile(f)
 	if err != nil {
 		return err
@@ -17,9 +18,8 @@ func (l *Loader) Load(f string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return l.Verify(v)
-}
-
-func (*Loader) Verify(interface{}) error {
+	if verifier, ok := v.(loader.Verifier); ok {
+		return verifier.Verify()
+	}
 	return nil
 }
