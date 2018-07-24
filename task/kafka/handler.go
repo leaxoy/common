@@ -2,9 +2,11 @@ package kafka
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
+	"github.com/leaxoy/common/task"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/semaphore"
 )
@@ -42,6 +44,10 @@ type (
 		producer sarama.AsyncProducer
 		consumer *cluster.Consumer
 	}
+)
+
+const (
+	Name = "kafka"
 )
 
 func WithProduce(fn func(producer sarama.AsyncProducer, msg *sarama.ProducerMessage) error) Option {
@@ -119,21 +125,32 @@ func InitTaskHandler(ctx context.Context, config *HandlerConfig, opts ...Option)
 	if err := h.check(); err != nil {
 		panic(err)
 	}
+	task.RegisterTasker(h)
 	go h.run()
 	return h
 }
 
-func (h *Handler) Produce(msg *sarama.ProducerMessage) error {
+func (h *Handler) Name() string {
+	return Name
+}
+
+func (h *Handler) Produce(ctx context.Context, msg interface{}) error {
 	if h.producer == nil {
 		return errors.New("err: handler not support produce message")
 	}
+	m, ok := msg.(*sarama.ProducerMessage)
+	if !ok {
+		return fmt.Errorf("err: not a valid sarama.ProducerMessage(%+v)", msg)
+	}
 	select {
-	case h.producerC <- msg:
+	case h.producerC <- m:
 	default:
 		return errors.New("err: produce message timeout")
 	}
 	return nil
 }
+
+func (h *Handler) SetConsumer(fn func(ctx context.Context, msg interface{})) {}
 
 func (h *Handler) check() error {
 	if h.consumer == nil && h.producer == nil {
