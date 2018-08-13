@@ -28,8 +28,5 @@ func (*l) Load(f string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	if verifier, ok := v.(loader.Verifier); ok {
-		return verifier.Verify()
-	}
 	return nil
 }
