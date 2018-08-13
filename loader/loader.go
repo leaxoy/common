@@ -5,7 +5,7 @@ type Loader interface {
 	Load(string, interface{}) error
 }
 
-var loaderMap map[string]Loader
+var loaderMap = make(map[string]Loader)
 
 func Register(loader Loader) {
 	loaderMap[loader.Name()] = loader
