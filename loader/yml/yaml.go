@@ -7,9 +7,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type Loader struct{}
+func init() {
+	loader.Register(new(l))
+}
 
-func (*Loader) Load(f string, v interface{}) error {
+const Name = "yaml"
+
+type l struct{}
+
+func (*l) Name() string {
+	return Name
+}
+
+func (*l) Load(f string, v interface{}) error {
 	buf, err := ioutil.ReadFile(f)
 	if err != nil {
 		return err

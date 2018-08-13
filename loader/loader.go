@@ -1,13 +1,20 @@
 package loader
 
 type Loader interface {
+	Name() string
 	Load(string, interface{}) error
 }
 
-type Verifier interface {
-	Verify() error
+var loaderMap map[string]Loader
+
+func Register(loader Loader) {
+	loaderMap[loader.Name()] = loader
 }
 
-func LoadWithLoader(f string, v interface{}, loader Loader) error {
-	return loader.Load(f, v)
+func Get(name string) Loader {
+	l, ok := loaderMap[name]
+	if ok {
+		return l
+	}
+	return nil
 }

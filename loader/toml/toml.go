@@ -7,9 +7,19 @@ import (
 	"github.com/leaxoy/common/loader"
 )
 
-type Loader struct{}
+func init() {
+	loader.Register(new(l))
+}
 
-func (*Loader) Load(f string, v interface{}) error {
+const Name = "toml"
+
+type l struct{}
+
+func (*l) Name() string {
+	return Name
+}
+
+func (*l) Load(f string, v interface{}) error {
 	buf, err := ioutil.ReadFile(f)
 	if err != nil {
 		return err
