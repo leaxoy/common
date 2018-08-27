@@ -3,7 +3,6 @@ package kafka
 import (
 	"errors"
 	"fmt"
-
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
 	"github.com/leaxoy/common/task"
@@ -126,7 +125,8 @@ func InitTaskHandler(ctx context.Context, config *HandlerConfig, opts ...Option)
 		panic(err)
 	}
 	task.RegisterTasker(h)
-	go h.run()
+	go h.runProducer()
+	go h.runConsumer()
 	return h
 }
 
@@ -192,43 +192,48 @@ func (h *Handler) setDefault() {
 	}
 }
 
-func (h *Handler) run() {
+func (h *Handler) runProducer() {
+	if h.producer == nil || h.producerC == nil {
+		return
+	}
 	for {
-		if h.producer != nil && h.producerC != nil {
-			select {
-			case <-h.ctx.Done():
-				return
-			case err := <-h.producer.Errors():
-				h.handleError(h.onProducerError(h.producer, err))
-			case msg := <-h.producerC:
-				h.handleError(h.onProduce(h.producer, msg))
-			case success := <-h.producer.Successes():
-				h.handleError(h.onProducerSuccess(h.producer, success))
-			}
+		select {
+		case <-h.ctx.Done():
+			return
+		case err := <-h.producer.Errors():
+			h.handleError(h.onProducerError(h.producer, err))
+		case msg := <-h.producerC:
+			h.handleError(h.onProduce(h.producer, msg))
+		case success := <-h.producer.Successes():
+			h.handleError(h.onProducerSuccess(h.producer, success))
 		}
-		if h.consumer != nil {
-			select {
-			case <-h.ctx.Done():
-				return
-			case err := <-h.consumer.Errors():
-				h.handleError(h.onConsumerError(h.consumer, err))
-			case notification := <-h.consumer.Notifications():
-				h.handleError(h.onConsumerNotification(h.consumer, notification))
-			case msg := <-h.consumer.Messages():
-				if err := h.concurrency.Acquire(context.Background(), 1); err == nil {
-					go func() {
-						h.handleError(h.onConsume(h.consumer, msg))
-						h.concurrency.Release(1)
-					}()
-				}
-			}
+	}
+}
+
+func (h *Handler) runConsumer() {
+	if h.consumer == nil {
+		return
+	}
+	select {
+	case <-h.ctx.Done():
+		return
+	case err := <-h.consumer.Errors():
+		h.handleError(h.onConsumerError(h.consumer, err))
+	case notification := <-h.consumer.Notifications():
+		h.handleError(h.onConsumerNotification(h.consumer, notification))
+	case msg := <-h.consumer.Messages():
+		if err := h.concurrency.Acquire(context.Background(), 1); err == nil {
+			go func() {
+				h.handleError(h.onConsume(h.consumer, msg))
+				h.concurrency.Release(1)
+			}()
 		}
 	}
 }
 
 func (c *HandlerConfig) check() error {
 	if c.MaxConcurrent <= 0 {
-		return errors.New("[config]err: max concurrent must large than 0")
+		return errors.New("[task] err: max concurrent must large than 0")
 	}
 	if c.MaxQueueSize < (1 << 8) {
 		c.MaxQueueSize = 1 << 8
@@ -237,17 +242,17 @@ func (c *HandlerConfig) check() error {
 		c.MaxQueueSize = 1 << 12
 	}
 	if len(c.Addrs) == 0 {
-		return errors.New("[config]err: addrs should has at least one addr")
+		return errors.New("[task] err: addrs should has at least one addr")
 	}
 	if c.ConsumerConfig == nil && c.ProducerConfig == nil {
-		return errors.New("[config]err: producer and consumer config both nil")
+		return errors.New("[task] err: producer and consumer config both nil")
 	}
 	if c.ConsumerConfig != nil {
 		if len(c.Topics) == 0 {
-			return errors.New("[config]err: consumer config is not nil, but no topics given")
+			return errors.New("[task] err: consumer config is not nil, but no topics given")
 		}
 		if c.GroupID == "" {
-			return errors.New("[config]err: consumer config it not nil, but groupID is nil")
+			return errors.New("[task] err: consumer config it not nil, but groupID is nil")
 		}
 	}
 	return nil
