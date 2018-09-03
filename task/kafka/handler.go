@@ -219,8 +219,8 @@ func (h *Handler) runConsumer() {
 		return
 	case err := <-h.consumer.Errors():
 		h.handleError(h.onConsumerError(h.consumer, err))
-	case notification := <-h.consumer.Notifications():
-		h.handleError(h.onConsumerNotification(h.consumer, notification))
+		//case notification := <-h.consumer.Notifications():
+		//	h.handleError(h.onConsumerNotification(h.consumer, notification))
 	case msg := <-h.consumer.Messages():
 		if err := h.concurrency.Acquire(context.Background(), 1); err == nil {
 			go func() {
