@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
+	"github.com/ivpusic/grpool"
 	"github.com/leaxoy/common/task"
 	"golang.org/x/net/context"
-	"golang.org/x/sync/semaphore"
 )
 
 type (
@@ -35,19 +35,47 @@ type (
 
 		handleError func(err error)
 
-		producerC   chan *sarama.ProducerMessage
-		concurrency *semaphore.Weighted
+		producerC chan *sarama.ProducerMessage
 
 		ctx context.Context
 
 		producer sarama.AsyncProducer
 		consumer *cluster.Consumer
+
+		pool *grpool.Pool
 	}
 )
 
 const (
 	Name = "kafka"
 )
+
+func (c *HandlerConfig) check() error {
+	if c.MaxConcurrent <= 0 {
+		return errors.New("[task] err: max concurrent must large than 0")
+	}
+	if c.MaxQueueSize < (1 << 8) {
+		c.MaxQueueSize = 1 << 8
+	}
+	if c.MaxQueueSize > (1 << 12) {
+		c.MaxQueueSize = 1 << 12
+	}
+	if len(c.Addrs) == 0 {
+		return errors.New("[task] err: addrs should has at least one addr")
+	}
+	if c.ConsumerConfig == nil && c.ProducerConfig == nil {
+		return errors.New("[task] err: producer and consumer config both nil")
+	}
+	if c.ConsumerConfig != nil {
+		if len(c.Topics) == 0 {
+			return errors.New("[task] err: consumer config is not nil, but no topics given")
+		}
+		if c.GroupID == "" {
+			return errors.New("[task] err: consumer config it not nil, but groupID is nil")
+		}
+	}
+	return nil
+}
 
 func WithProduce(fn func(producer sarama.AsyncProducer, msg *sarama.ProducerMessage) error) Option {
 	return func(handler *Handler) {
@@ -91,14 +119,14 @@ func WithHandleError(fn func(err error)) Option {
 	}
 }
 
-func InitTaskHandler(ctx context.Context, config *HandlerConfig, opts ...Option) *Handler {
+func InitTaskHandler(ctx context.Context, config *HandlerConfig, opts ...Option) (*Handler, error) {
 	if err := config.check(); err != nil {
-		panic(err)
+		return nil, err
 	}
 	h := &Handler{
-		producerC:   make(chan *sarama.ProducerMessage, config.MaxQueueSize),
-		ctx:         ctx,
-		concurrency: semaphore.NewWeighted(config.MaxConcurrent),
+		producerC: make(chan *sarama.ProducerMessage, config.MaxQueueSize),
+		ctx:       ctx,
+		pool:      grpool.NewPool(int(config.MaxConcurrent), config.MaxQueueSize),
 	}
 	if config.ProducerConfig != nil {
 		producer, err := sarama.NewAsyncProducer(config.Addrs, config.ProducerConfig)
@@ -122,12 +150,12 @@ func InitTaskHandler(ctx context.Context, config *HandlerConfig, opts ...Option)
 	}
 	h.setDefault()
 	if err := h.check(); err != nil {
-		panic(err)
+		return nil, err
 	}
 	task.RegisterTasker(h)
 	go h.runProducer()
 	go h.runConsumer()
-	return h
+	return h, nil
 }
 
 func (h *Handler) Name() string {
@@ -174,14 +202,14 @@ func (h *Handler) setDefault() {
 		}
 		if h.onProducerError == nil {
 			h.onProducerError = func(producer sarama.AsyncProducer, err *sarama.ProducerError) error {
-				return nil
+				return err
 			}
 		}
 	}
 	if h.consumer != nil {
 		if h.onConsumerError == nil {
 			h.onConsumerError = func(consumer *cluster.Consumer, err error) error {
-				return nil
+				return err
 			}
 		}
 		if h.onConsumerNotification == nil {
@@ -214,46 +242,16 @@ func (h *Handler) runConsumer() {
 	if h.consumer == nil {
 		return
 	}
-	select {
-	case <-h.ctx.Done():
-		return
-	case err := <-h.consumer.Errors():
-		h.handleError(h.onConsumerError(h.consumer, err))
-		//case notification := <-h.consumer.Notifications():
-		//	h.handleError(h.onConsumerNotification(h.consumer, notification))
-	case msg := <-h.consumer.Messages():
-		if err := h.concurrency.Acquire(context.Background(), 1); err == nil {
-			go func() {
-				h.handleError(h.onConsume(h.consumer, msg))
-				h.concurrency.Release(1)
-			}()
+	for {
+		select {
+		case <-h.ctx.Done():
+			return
+		case err := <-h.consumer.Errors():
+			h.handleError(h.onConsumerError(h.consumer, err))
+			//case notification := <-h.consumer.Notifications():
+			//	h.handleError(h.onConsumerNotification(h.consumer, notification))
+		case msg := <-h.consumer.Messages():
+			h.pool.JobQueue <- func() { h.handleError(h.onConsume(h.consumer, msg)) }
 		}
 	}
-}
-
-func (c *HandlerConfig) check() error {
-	if c.MaxConcurrent <= 0 {
-		return errors.New("[task] err: max concurrent must large than 0")
-	}
-	if c.MaxQueueSize < (1 << 8) {
-		c.MaxQueueSize = 1 << 8
-	}
-	if c.MaxQueueSize > (1 << 12) {
-		c.MaxQueueSize = 1 << 12
-	}
-	if len(c.Addrs) == 0 {
-		return errors.New("[task] err: addrs should has at least one addr")
-	}
-	if c.ConsumerConfig == nil && c.ProducerConfig == nil {
-		return errors.New("[task] err: producer and consumer config both nil")
-	}
-	if c.ConsumerConfig != nil {
-		if len(c.Topics) == 0 {
-			return errors.New("[task] err: consumer config is not nil, but no topics given")
-		}
-		if c.GroupID == "" {
-			return errors.New("[task] err: consumer config it not nil, but groupID is nil")
-		}
-	}
-	return nil
 }
