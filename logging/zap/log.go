@@ -2,17 +2,30 @@ package zap
 
 import (
 	"github.com/leaxoy/common/logging"
-	"github.com/leaxoy/logprovider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"io"
-	"os"
-	"path/filepath"
 	"time"
 )
 
 type handler struct {
 	syncTicker time.Duration
+	logger     *zap.Logger
+	skip       int
+}
+
+type Option func(*handler)
+
+func Skip(skip int) Option {
+	return func(i *handler) {
+		i.skip = skip
+	}
+}
+
+func SyncTicker(t time.Duration) Option {
+	return func(i *handler) {
+		i.syncTicker = t
+	}
 }
 
 func (h *handler) sync(core zapcore.Core) {
@@ -21,8 +34,6 @@ func (h *handler) sync(core zapcore.Core) {
 		core.Sync()
 	}
 }
-
-func (h *handler) Skip(skip int) {}
 
 func (*handler) Debugln(kv logging.KV, msg string) {
 	zap.L().Debug(msg, wrapFields(nil, kv)...)
@@ -48,18 +59,23 @@ func (*handler) Fatalln(kv logging.KV, msg string) {
 	zap.L().Fatal(msg, wrapFields(nil, kv)...)
 }
 
-func InitLogger(config logging.LoggerConfig) logging.Logger {
-	lp := logprovider.NewAsyncFrame(1, logprovider.NewFileProvider(filepath.Join(config.LogDir, config.LogFile), logprovider.DayDur))
-	writer := io.MultiWriter(os.Stderr, lp)
+func NewLogger(w io.Writer, opts ...Option) logging.Logger {
+	h := &handler{syncTicker: time.Duration(10) * time.Second, skip: 2}
+	for _, opt := range opts {
+		opt(h)
+	}
 	core := zapcore.NewCore(zapcore.NewJSONEncoder(zapcore.EncoderConfig{
-		EncodeDuration: func(duration time.Duration, encoder zapcore.PrimitiveArrayEncoder) {
-			encoder.AppendString(duration.String())
-		},
-		EncodeTime: zapcore.ISO8601TimeEncoder,
-	}), zapcore.AddSync(writer), zap.InfoLevel)
-	logger := zap.New(core, zap.AddCaller())
+		CallerKey:      "caller",
+		EncodeCaller:   zapcore.FullCallerEncoder,
+		TimeKey:        "time",
+		EncodeDuration: zapcore.StringDurationEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		LevelKey:       "level",
+		EncodeLevel:    zapcore.LowercaseLevelEncoder,
+		MessageKey:     "msg",
+	}), zapcore.AddSync(w), zap.InfoLevel)
+	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(h.skip))
 	zap.ReplaceGlobals(logger)
-	h := &handler{syncTicker: time.Duration(10) * time.Second}
 	go h.sync(core)
 	return h
 }
