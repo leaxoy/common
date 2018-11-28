@@ -23,6 +23,17 @@ func Skip(skip int) Option {
 	}
 }
 
+func WithFields(kv map[string]interface{}) Option {
+	return func(h *handler) {
+		if h.kv == nil {
+			h.kv = make(map[string]interface{})
+		}
+		for k, v := range kv {
+			h.kv[k] = v
+		}
+	}
+}
+
 func (h *handler) Debugln(kv logging.KV, msg string) {
 	entry(h.skip, kv).Debugln(msg)
 }
