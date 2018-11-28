@@ -35,27 +35,27 @@ func WithFields(kv map[string]interface{}) Option {
 }
 
 func (h *handler) Debugln(kv logging.KV, msg string) {
-	entry(h.skip, kv).Debugln(msg)
+	h.entry(h.skip, kv).Debugln(msg)
 }
 
 func (h *handler) Infoln(kv logging.KV, msg string) {
-	entry(h.skip, kv).Infoln(msg)
+	h.entry(h.skip, kv).Infoln(msg)
 }
 
 func (h *handler) Warnln(kv logging.KV, msg string) {
-	entry(h.skip, kv).Warnln(msg)
+	h.entry(h.skip, kv).Warnln(msg)
 }
 
 func (h *handler) Errorln(err error, kv logging.KV, msg string) {
-	entry(h.skip, kv).WithError(err).Errorln(msg)
+	h.entry(h.skip, kv).WithError(err).Errorln(msg)
 }
 
 func (h *handler) Panicln(kv logging.KV, msg string) {
-	entry(h.skip, kv).Panicln(msg)
+	h.entry(h.skip, kv).Panicln(msg)
 }
 
 func (h *handler) Fatalln(kv logging.KV, msg string) {
-	entry(h.skip, kv).Fatalln(msg)
+	h.entry(h.skip, kv).Fatalln(msg)
 }
 
 func NewLogger(w io.Writer, opts ...Option) logging.Logger {
@@ -68,9 +68,12 @@ func NewLogger(w io.Writer, opts ...Option) logging.Logger {
 	return h
 }
 
-func entry(skip int, kv logging.KV) *logrus.Entry {
+func (h *handler) entry(skip int, kv logging.KV) *logrus.Entry {
 	if kv == nil {
 		kv = make(map[string]interface{})
+	}
+	for k, v := range h.kv {
+		kv[k] = v
 	}
 	caller := "???"
 	_, file, line, ok := runtime.Caller(skip)
