@@ -47,7 +47,7 @@ func (h *handler) Warnln(kv logging.KV, msg string) {
 }
 
 func (h *handler) Errorln(err error, kv logging.KV, msg string) {
-	entry(h.skip, kv).WithError(err).Warnln(msg)
+	entry(h.skip, kv).WithError(err).Errorln(msg)
 }
 
 func (h *handler) Panicln(kv logging.KV, msg string) {
